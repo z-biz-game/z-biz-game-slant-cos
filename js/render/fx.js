@@ -34,14 +34,15 @@ export function createFx({ sprites = null, reduceMotion = false, now = () => per
   })();
 
   // 每帧只把"真正过去了多少秒"记进累加器；结算循环从这里取定步长。
+  // dt 就是"这一帧真正过去了多少秒"——本模块唯一的时间入口，其余一切都要乘它。
   function feed() {
     const t = now();
-    let elapsed = (t - last) / 1000;
+    let dt = (t - last) / 1000;
     last = t;
-    if (!(elapsed > 0)) return 0;
-    if (elapsed > 0.25) elapsed = 0.25; // 切后台回来不补算一整套宇宙
-    accum += elapsed;
-    return elapsed;
+    if (!(dt > 0)) return 0;
+    if (dt > 0.25) dt = 0.25; // 切后台回来不补算一整套宇宙
+    accum += dt;
+    return dt;
   }
 
   function integrate(dt) {
