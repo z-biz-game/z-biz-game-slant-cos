@@ -27,8 +27,11 @@ function audio() {
 // a call to this; adding a second voice shape is how a game ends up with sounds that do not
 // belong to the same instrument.
 function tone({ f0, f1 = f0, dur = 0.12, type = 'sine', gain = 0.22, delay = 0 }) {
+  // 先问 enabled 再碰 audio()：原来的顺序是 audio() 在前，于是静音状态下第一声仍会
+  // new AudioContext() 并 resume()——"静音"只改了个布尔值，音频设备照样被占用。
+  if (!enabled) return;
   const ac = audio();
-  if (!ac || !enabled) return;
+  if (!ac) return;
   const t = ac.currentTime + delay;
   const osc = ac.createOscillator();
   const vol = ac.createGain();
@@ -46,6 +49,10 @@ function tone({ f0, f1 = f0, dur = 0.12, type = 'sine', gain = 0.22, delay = 0 }
 export const Sound = {
   setEnabled(v) {
     enabled = !!v;
+    if (!ctx) return;
+    // 已经建好的上下文要真的停掉，不然静音只是不再发声、却留着合成器在后台跑。
+    if (!enabled) ctx.suspend().catch(() => {});
+    else ctx.resume().catch(() => {});
   },
   enabled: () => enabled,
 
