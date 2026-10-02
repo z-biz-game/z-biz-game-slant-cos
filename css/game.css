@@ -51,11 +51,18 @@ body::before {
 #app {
   max-width: 1180px;
   margin: 0 auto;
-  padding: var(--space-page) var(--space-page) var(--space-inner);
+  /* env() 只有在 viewport-fit=cover 下才非零；max() 保证桌面端仍是原来的 20/12px。
+     不这么写，iPhone 上刘海压住顶栏那排按钮、Home 指示条压住"清空存档"。 */
+  padding:
+    max(var(--space-page), env(safe-area-inset-top))
+    max(var(--space-page), env(safe-area-inset-right))
+    max(var(--space-inner), env(safe-area-inset-bottom))
+    max(var(--space-page), env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
   gap: var(--space-card);
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -66,6 +73,7 @@ body::before {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-card);
 }
 
@@ -83,7 +91,7 @@ body::before {
   text-transform: uppercase;
 }
 
-.top-actions { display: flex; gap: var(--space-gutter); }
+.top-actions { display: flex; flex-wrap: wrap; gap: var(--space-gutter); }
 
 button {
   font: inherit;
@@ -93,6 +101,11 @@ button {
   border: 1px solid var(--line);
   background: var(--surface);
   padding: 10px 16px;
+  /* 44px 是 iOS HIG 与 Material 共同的命中区下限：手指不是光标。
+     棋盘格子的边长由 js/theme.js 的 Cell.min 管（10×10 的盘不可能每格 44px），
+     这里管的是外壳控件——它们必须任何时候都点得着。 */
+  min-height: 44px;
+  min-width: 44px;
   transition: background var(--dur-tap) var(--ease-ease), border-color var(--dur-tap) var(--ease-ease), transform var(--dur-tap) var(--ease-spring);
 }
 
@@ -137,7 +150,23 @@ main { flex: 1; }
 }
 
 .reduce-motion .view,
+.reduce-motion #win-veil,
+.reduce-motion #pause-veil,
+.reduce-motion #help-veil,
 .reduce-motion button { animation: none; transition: none; }
+
+/* 系统偏好是地板：玩家没手动点"动效 省"，OS 设了减少动态效果也必须生效。
+   画布那一侧的对应分支在 js/render/fx.js —— CSS 管不到它。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* menu */
 
@@ -298,9 +327,11 @@ main { flex: 1; }
 
 .conflict-line.good { color: var(--accent); }
 
-#win-veil {
+#win-veil,
+#pause-veil {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: grid;
   place-items: center;
   background: rgba(8, 11, 22, 0.78);
@@ -308,7 +339,8 @@ main { flex: 1; }
   animation: rise var(--dur-base) var(--ease-ease) both;
 }
 
-.win-card {
+.win-card,
+.pause-card {
   text-align: center;
   padding: var(--space-card);
   border: 1px solid var(--accent);
@@ -317,10 +349,38 @@ main { flex: 1; }
   max-width: 86%;
 }
 
-.win-card h3 { margin: 0 0 6px; font-size: 19px; }
-.win-card p { margin: 0 0 8px; font-size: 13px; color: var(--ink-dim); }
+.win-card h3, .pause-card h3 { margin: 0 0 6px; font-size: 19px; }
+.win-card p, .pause-card p { margin: 0 0 8px; font-size: 13px; color: var(--ink-dim); }
 .win-record { color: var(--success) !important; font-weight: 700; }
-.win-actions { display: flex; gap: var(--space-gutter); justify-content: center; }
+.win-actions { display: flex; gap: var(--space-gutter); justify-content: center; flex-wrap: wrap; }
+
+/* 教学层是应用级的：对局中想再看一眼规则，不该被迫回选档。 */
+#help-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: max(var(--space-page), env(safe-area-inset-top)) var(--space-page) max(var(--space-inner), env(safe-area-inset-bottom));
+  background: rgba(8, 11, 22, 0.82);
+  animation: rise var(--dur-base) var(--ease-ease) both;
+}
+
+.help-card {
+  max-width: min(600px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-inner);
+  padding: var(--space-card);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-card);
+  background: var(--surface-lift);
+}
+
+.help-card h3 { margin: 0; font-size: 18px; }
 
 .panel {
   display: flex;
@@ -337,7 +397,8 @@ main { flex: 1; }
 
 .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
-.acts .primary { grid-column: 1 / -1; }
+.acts .primary,
+.acts .wide { grid-column: 1 / -1; }
 .acts .primary span { margin-left: 6px; }
 
 .stats {

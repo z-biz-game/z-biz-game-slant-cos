@@ -39,8 +39,11 @@
       </div>
     </div>
     <div class="top-actions">
+      <button id="btn-help" class="ghost" type="button" aria-pressed="false" aria-label="玩法教学：四条规则与三种手势">教学</button>
       <button id="btn-sound" class="ghost" type="button" aria-pressed="true">音效 开</button>
       <button id="btn-motion" class="ghost" type="button" aria-pressed="false">动效 全</button>
+      <button id="btn-pause" class="ghost" type="button" aria-pressed="false" aria-label="暂停或继续这一局">暂停</button>
+      <button id="btn-fullscreen" class="ghost" type="button" aria-pressed="false" aria-label="全屏显示棋盘">全屏</button>
     </div>
   </header>
 
@@ -104,6 +107,15 @@
               </div>
             </div>
           </div>
+          <div id="pause-veil" hidden>
+            <div class="pause-card">
+              <h3>已暂停</h3>
+              <p id="pause-meta" class="mono"></p>
+              <div class="win-actions">
+                <button id="btn-resume-play" class="primary" type="button">继续这一局</button>
+              </div>
+            </div>
+          </div>
         </div>
         <p id="state-line" class="conflict-line" aria-live="polite"></p>
       </div>
@@ -116,8 +128,9 @@
         <div class="acts">
           <button id="btn-hint" class="primary" type="button">提示<span class="mono" id="hint-count">0</span></button>
           <button id="btn-undo" class="ghost" type="button">撤销</button>
+          <button id="btn-restart" class="ghost" type="button" aria-label="重开这一张盘：斜线、步数、提示与计时全部归零">重开本局</button>
           <button id="btn-new" class="ghost" type="button">换一局</button>
-          <button id="btn-menu" class="ghost" type="button">回选档</button>
+          <button id="btn-menu" class="ghost wide" type="button">回选档</button>
         </div>
 
         <div class="stats">
@@ -142,7 +155,7 @@
           <span><i class="sw sw-empty"></i>空格</span>
           <span><i class="sw sw-done"></i>数字凑齐的环</span>
         </div>
-        <p class="keyhint"><b>拖动</b> 连续放线 · <b>从自己的线上起笔</b> 就是擦 · <b>/</b> <b>\</b> 选方向 · <b>H</b> 提示 · <b>Z</b> 撤销 · <b>M</b> 换方向</p>
+        <p class="keyhint"><b>拖动</b> 连续放线 · <b>从自己的线上起笔</b> 就是擦 · <b>/</b> <b>\</b> 选方向 · <b>H</b> 提示 · <b>Z</b> 撤销 · <b>X</b> 换方向<br><b>空格</b>/<b>P</b> 暂停 · <b>R</b> 重开本局 · <b>M</b> 静音 · <b>F</b> 全屏 · <b>?</b> 教学</p>
       </aside>
     </section>
   </main>
@@ -151,6 +164,24 @@
     <span>每局唯一解 · 每局可用逻辑推到底 · 提示只给推得出的一步 — 由 <code>tools/verify.sh</code> 在真实浏览器里逐条断言。</span>
     <button id="btn-reset" class="link" type="button">清空存档</button>
   </footer>
+
+  <div id="help-veil" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="help-card">
+      <h3 id="help-title">四条规则，三种手势</h3>
+      <ol class="rules">
+        <li><b>无钉节点</b>：数字 0 的四周，一条线都不能收在这里。</li>
+        <li><b>四面归一</b>：数字等于它周围的格数，那每一格都得把线收到这里。</li>
+        <li><b>只差这些</b>：还差几条线，而只剩几格可放——那几格都必须收在这里。</li>
+        <li><b>已经够了</b>：线已经凑满，其余格子就都不能再收在这里。</li>
+      </ol>
+      <p class="rules-note">四条都只数一个交点自己的账：它们写下的每一格，在盘面的<b>每一个解</b>里都成立。</p>
+      <p class="keyhint"><b>拖动</b> 一路放线 · <b>从自己的线上起笔</b> 就是擦 · <b>点一下</b> 单格改方向 · 放错了用 <b>撤销</b></p>
+      <p class="keyhint"><b>空格</b>/<b>P</b> 暂停 · <b>R</b> 重开本局 · <b>M</b> 静音 · <b>F</b> 全屏 · <b>H</b> 提示 · <b>Z</b> 撤销 · <b>Esc</b> 关掉本卡</p>
+      <div class="win-actions">
+        <button id="btn-help-close" class="primary" type="button">知道了</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script type="module" src="js/main.js"></script>
