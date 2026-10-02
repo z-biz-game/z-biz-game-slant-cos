@@ -20,14 +20,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # No bundler: the game ships plain ES modules, so the site is a file copy.
-      # Only these three paths are reachable from index.html — keeping the server,
-      # the electron shell, the harness and the docs out of the artifact also keeps
-      # node_modules out, which `path: .` would happily upload.
+      # 路径显式列出而不是 `cp -r .`：那样会把 server、electron 壳、harness、文档和
+      # node_modules 一起塞进产物。index.html 现在引用 manifest / sw.js / assets 下的位图，
+      # 少拷一个就是线上 404 —— 而本地闸照样全绿，所以这里补两条 test -f 当闸。
       - name: Assemble static site
         run: |
           mkdir _site
-          cp index.html _site/
-          cp -r css js _site/
+          cp index.html manifest.webmanifest sw.js _site/
+          cp -r css js assets _site/
+          test -f _site/assets/icons/icon-512.png
+          test -f _site/assets/og/og-image.png
+          test -f _site/assets/fx/spark-amber.png
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

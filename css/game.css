@@ -18,6 +18,36 @@ html, body {
 
 body { touch-action: manipulation; }
 
+/* 纸纹理：assets/gen/gen_art.py 产的 256 无缝格纹，铺在根背景之上、内容之下。
+   z-index:-1 且 pointer-events:none —— 它不能参与命中测试，更不能碰到画布像素，
+   棋盘的颜色是引擎判定的一部分（tools/scenarios.js 直接采样格心）。 */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: url('../assets/textures/paper-256.png') repeat;
+  background-size: 256px 256px;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inner);
+}
+
+.brand-mark {
+  display: block;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+
+.brand-txt { display: flex; flex-direction: column; }
+
 #app {
   max-width: 1180px;
   margin: 0 auto;

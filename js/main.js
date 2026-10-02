@@ -11,6 +11,7 @@ import * as Engine from './engine/slant.js';
 import { countSolutions } from './engine/count.js';
 import { BoardView } from './render/board.js';
 import { Game, name, OPEN, SLASH, BACK } from './ui/game.js';
+import { registerServiceWorker, installPromptSurface } from './pwa.js';
 
 const VERSION = '1.0.0';
 
@@ -441,8 +442,22 @@ applyThemeVars();
 applySettings();
 renderMenu();
 
+const swRegistration = registerServiceWorker();
+installPromptSurface(window);
+const pwaState = { registered: false, scope: null, version: VERSION };
+if (swRegistration && typeof swRegistration.then === 'function') {
+  swRegistration
+    .then((reg) => {
+      if (!reg) return;
+      pwaState.registered = true;
+      pwaState.scope = reg.scope;
+    })
+    .catch(() => {});
+}
+
 window.slant = {
   version: VERSION,
+  pwa: pwaState,
   view,
   get game() {
     return game;

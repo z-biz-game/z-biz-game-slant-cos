@@ -25,6 +25,7 @@ jobs:
         run: |
           for f in $(git ls-files 'js/*.js' 'js/*/*.js'); do node --check "$f" || exit 1; done
           node --check server.cjs
+          node --check sw.js
           node --check electron/main.cjs
           node --check electron/preload.cjs
           for f in $(git ls-files 'tools/*.mjs' tools/scenarios.js); do node --check "$f" || exit 1; done
@@ -43,6 +44,12 @@ jobs:
 
       - name: Entry files exist
         run: test -f index.html && grep -q '<canvas' index.html && grep -q 'js/main.js' index.html
+
+      # 图标类交付最容易注水成"仓里躺着一张 1024 PNG，而 index.html 还指着 data-URI 的 SVG"，
+      # 或者 manifest 写了 icons 而文件没提交。这一步把两种都判红：每条同源引用必须解析到
+      # 真实文件，每个 PNG 读 IHDR 与声明尺寸对账。只用标准库，runner 上不保证有 Pillow。
+      - name: Asset references resolve to real PNGs
+        run: python3 tools/asset_gate.py
 
   # 真浏览器闸：headless Chrome + CDP，读 DOM 文本/几何与画布像素，不读内部标志位。
   # 独立 job，node 22 而不是 check job 的 20：台架是裸 CDP 驱动，用的是 Node 22 才有的全局

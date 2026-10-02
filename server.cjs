@@ -15,6 +15,9 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  // 没有这一条，manifest 会以 application/octet-stream 送出，Chrome 直接拒绝解析：
+  // 本地全绿、装不上主屏幕，是最难自己发现的那类错。
+  '.webmanifest': 'application/manifest+json',
 };
 
 function createServer(root = __dirname) {
