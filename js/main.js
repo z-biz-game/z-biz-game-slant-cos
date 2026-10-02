@@ -12,6 +12,7 @@ import { countSolutions } from './engine/count.js';
 import { BoardView } from './render/board.js';
 import { Game, name, OPEN, SLASH, BACK } from './ui/game.js';
 import { registerServiceWorker, installPromptSurface } from './pwa.js';
+import { createFx } from './render/fx.js';
 
 const VERSION = '1.0.0';
 
@@ -49,8 +50,61 @@ const el = {
 };
 
 const view = new BoardView(el.canvas);
+
+// ---- 动效层 ------------------------------------------------------------------
+// 唯一的动画时钟在 js/render/fx.js（定步长累加器 + dt 积分）。这里只做三件事：
+// 喂帧、把脉冲进度换算成颜色、把粒子画到覆盖层。覆盖层是独立 canvas，
+// 不动 #board 的像素——浏览器闸按棋盘中心采样色，任何改动棋盘像素的"美化"都会打红它。
+const FX_SPRITES = ['spark-amber', 'spark-blue', 'spark-green', 'shard-amber'];
+const fxSprites = {};
+for (const key of FX_SPRITES) {
+  const img = new Image();
+  img.src = `./assets/fx/${key}.png`;
+  fxSprites[key] = img;
+}
+const fx = createFx({ sprites: fxSprites, reduceMotion: Store.setting('reduceMotion') });
+const fxCanvas = $('#fx');
+const fxCtx = fxCanvas && fxCanvas.getContext ? fxCanvas.getContext('2d') : null;
+
+function syncFxCanvas() {
+  if (!fxCanvas) return;
+  if (fxCanvas.width !== el.canvas.width || fxCanvas.height !== el.canvas.height) {
+    fxCanvas.width = el.canvas.width;
+    fxCanvas.height = el.canvas.height;
+  }
+}
+
+const hexRgba = (color, alpha) => {
+  if (!/^#[0-9a-f]{6}$/i.test(color || '')) return color || '';
+  const n = parseInt(color.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${Math.max(0, Math.min(1, alpha)).toFixed(3)})`;
+};
+
+// 环的透明度由仿真时钟里的 t 决定，跟这一帧是 16ms 还是 41ms 无关。
+function fxPulse() {
+  const rings = fx.active();
+  if (!rings.length) return null;
+  const r = rings[0];
+  if (r.cell == null) return null;
+  return { cell: r.cell, node: r.node, color: r.color || hexRgba(Palette.hint, 0.28 + 0.72 * r.fade) };
+}
+
+function fxFrame() {
+  const elapsed = fx.feed(); // 暂停时也要刷新 last，否则回来会补算整个暂停段
+  if (!paused) {
+    const steps = fx.step();
+    if (steps || elapsed) {
+      syncFxCanvas();
+      if (fxCtx) fxCtx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
+      const live = fxCtx ? fx.render(fxCtx, fxCanvas.width, fxCanvas.height, window.devicePixelRatio || 1) : 0;
+      if (live || fx.active().length) draw();
+    }
+  }
+  requestAnimationFrame(fxFrame);
+}
+requestAnimationFrame(fxFrame);
+
 let game = null;
-let pulse = null;
 let stroke = null;
 let startedAt = 0;
 let baseElapsed = 0;
@@ -74,7 +128,7 @@ function draw() {
   if (!game) return;
   const { w, h } = availBox();
   view.resize(game, w, h);
-  view.draw(game, { pulse, preview: stroke && stroke.items.length ? { cells: stroke.items.map((i) => i.cell) } : null });
+  view.draw(game, { pulse: fxPulse(), preview: stroke && stroke.items.length ? { cells: stroke.items.map((i) => i.cell) } : null });
 }
 
 // One place writes the readouts, so a stat can never be updated by half the file.
@@ -118,7 +172,6 @@ function startClock() {
   clearInterval(ticker);
   ticker = setInterval(() => {
     el.time.textContent = fmtMs(clock());
-    if (pulse) draw();
   }, 1000);
 }
 
@@ -231,22 +284,15 @@ function showHint(info) {
   if (info.conflict) {
     el.hintRule.textContent = '这里和数字矛盾';
     el.hintLine.textContent = info.conflict;
-    pulse = { cell: info.cell, color: 'rgba(255,92,122,0.9)' };
-    setTimeout(() => {
-      if (pulse && pulse.cell === info.cell) pulse = null;
-      draw();
-    }, 1600);
+    fx.ring(info.cell, null, 1.6, 'rgba(255,92,122,0.9)');
+    draw();
     Sound.conflict();
     return;
   }
   el.hintRule.textContent = `规则：${info.rule}`;
   el.hintLine.textContent = info.why;
-  pulse = { cell: info.cell, node: info.node };
-  const mine = pulse;
-  setTimeout(() => {
-    if (pulse === mine) pulse = null;
-    draw();
-  }, 1600);
+  fx.ring(info.cell, info.node, 1.6);
+  draw();
   Sound.hint();
 }
 
@@ -264,11 +310,18 @@ function onWin() {
   el.winMeta.textContent = `${tierFor(game.puzzle.tier).name} · ${game.w}×${game.h} · ${fmtMs(ms)} · ${game.moves} 步 · 提示 ${game.hints} 次`;
   el.winRecord.textContent = better ? '新纪录：这一局比存档里的更不求人。' : '未破纪录：同档先比提示次数。';
   el.winVeil.hidden = false;
+  const rect = el.canvas.getBoundingClientRect();
+  fx.burst('win', rect.width / 2, rect.height / 2, Math.max(0.6, rect.width / 420));
+  fx.ring(null, null, 0.0001);
   Sound.win();
   renderRecords();
 }
 
-function afterStep(soundKey) {
+function afterStep(soundKey, cells) {
+  if (soundKey && cells && cells.length) {
+    const r = view.cellRect(cells[0]);
+    fx.burst(soundKey, r.x + r.w / 2, r.y + r.h / 2, Math.max(0.5, r.w / 44));
+  }
   syncAll();
   if (game.status === 'won') onWin();
   else {
@@ -289,7 +342,7 @@ function useHint() {
     return info;
   }
   showHint(info);
-  if (game.hints !== before) afterStep('place');
+  if (game.hints !== before) afterStep('hint', [info.cell]);
   return info;
 }
 
@@ -297,7 +350,6 @@ function undo() {
   if (!game || paused) return null;
   const step = game.undo();
   if (!step) return null;
-  pulse = null;
   Sound.undo();
   syncAll();
   flushResume();
@@ -310,7 +362,7 @@ function begin({ tier = 'trainee', seed = null, resume = null } = {}) {
   const puzzle = makePuzzle(origin, tier);
   if (!puzzle) return null;
   game = new Game(puzzle);
-  pulse = null;
+  fx.reset();
   stroke = null;
   el.winVeil.hidden = true;
   baseElapsed = 0;
@@ -411,6 +463,8 @@ function applySettings() {
   $('#btn-sound').textContent = Store.setting('sound') ? '音效 开' : '音效 关';
   $('#btn-motion').setAttribute('aria-pressed', String(!!Store.setting('reduceMotion')));
   $('#btn-motion').textContent = reduce ? '动效 省' : '动效 全';
+  // 省动效必须同时传进仿真时钟：只关 CSS 过渡、粒子照放，等于没省。
+  fx.setReduceMotion(reduce);
 }
 
 // ---- pointer gestures: down decides the value for the whole stroke, up commits one step ------
@@ -464,7 +518,7 @@ function strokeEnd() {
     syncAll();
     return null;
   }
-  afterStep(s.value === OPEN ? 'rub' : 'place');
+  afterStep(s.value === OPEN ? 'rub' : 'place', s.items.map((i) => i.cell));
   return step;
 }
 
@@ -626,6 +680,8 @@ window.slant = {
   restart,
   setHelp,
   toggleFullscreen,
+  fx,
+  fxState: () => fx.state(),
   runReadout,
   setMode,
   // The harness commits through the same path a pointer release does, so a scenario that passes
@@ -633,13 +689,13 @@ window.slant = {
   stroke(cells, value) {
     if (!game || paused) return null;
     const step = game.stroke(cells, value === undefined ? game.mode : value);
-    if (step) afterStep(step.value === OPEN ? 'rub' : 'place');
+    if (step) afterStep(step.value === OPEN ? 'rub' : 'place', cells);
     return step;
   },
   tap(t, mode) {
     if (!game || paused) return null;
     const step = mode === undefined ? game.tap(t) : game.tap(t, mode);
-    if (step) afterStep(step.writes[0].to === OPEN ? 'rub' : 'place');
+    if (step) afterStep(step.writes[0].to === OPEN ? 'rub' : 'place', [t]);
     return step;
   },
   solveWithLogic() {
