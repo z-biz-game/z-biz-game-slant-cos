@@ -245,6 +245,40 @@ function begin({ tier = 'trainee', seed = null, resume = null } = {}) {
   return game;
 }
 
+// 重开：**同一道题**从头再来 —— 落笔、撤销栈、步数、提示次数、提示游标、计时、结算遮罩
+// 全部归零，但不换题。跟 换一局 的分工：换一局去引擎重抽一道新题（那是「再来一局」），
+// 这里是「这题我走错了，原地重来」——玩家要的是同一个题，不是新题。
+//
+// 为什么不能只调一次 resetInk()/init() 就完事：那些只碰得到引擎里的盘面数组，
+// UI 层的撤销栈、步数、提示次数、提示游标、胜负标记、耗时时钟都是各自独立存着的缓存，
+// 不挨个点名就会留半局的痕迹在新局里（详见 Game.resetAll 的注释）。
+function restart() {
+  if (!game) return null;
+  game.resetAll();               // 盘面 + steps + moves + hints + cursor + status + mode + lastHint
+  pulse = null;                   // 上一条提示留下的高亮，属于上一局
+  stroke = null;                  // 上一次没画完的拖拽手势
+  el.winVeil.hidden = true;       // 结算遮罩收起：上一局赢了的遮罩不能压在重开后的盘上
+  baseElapsed = 0;                // 耗时归零
+  // 暂停中重开就保持停表，否则 startClock() 会把暂停期间憋下的墙钟一次性灌进计时。
+  if (paused) {
+    startedAt = 0;
+    clearInterval(ticker);
+    ticker = 0;
+  } else {
+    startClock();                 // 没暂停就重新起跑，重开后的计时是这一局自己的
+  }
+  setMode(SLASH);                 // 临时态：落笔模式回默认，HUD 的 aria-pressed 一起回写
+  el.hintRule.textContent = '提示理由';
+  el.hintLine.textContent = '按 提示 会说出当前能推的一格，以及它依据哪条规则。';
+  show('game');
+  syncAll();
+  // 存档覆盖成本局的空盘：刷新页面不会又冒出走错那半局的线。
+  // 特意**不**碰 Store 的偏好（静音 / 减动效 / 最好成绩 / 纪录）——那些是玩家的东西，不是这一局的东西。
+  flushResume();
+  renderResumeCard();
+  return game;
+}
+
 function show(which) {
   el.viewMenu.hidden = which !== 'menu';
   el.viewGame.hidden = which !== 'game';
@@ -395,6 +429,7 @@ $('#btn-mode-slash').addEventListener('click', () => setMode(SLASH));
 $('#btn-mode-back').addEventListener('click', () => setMode(BACK));
 $('#btn-hint').addEventListener('click', useHint);
 $('#btn-undo').addEventListener('click', undo);
+$('#btn-restart').addEventListener('click', restart);
 $('#btn-new').addEventListener('click', () => begin({ tier: game ? game.puzzle.tier : 'trainee' }));
 $('#btn-menu').addEventListener('click', () => {
   flushResume();
@@ -427,6 +462,9 @@ window.addEventListener('keydown', (ev) => {
   if (ev.target && /input|textarea/i.test(ev.target.tagName)) return;
   if (ev.key === 'h') useHint();
   else if (ev.key === 'z') undo();
+  // R 重开同一题，**局中就能按**（不只结算后）：玩家走到一半发现走错了，当场 R 一下重来。
+  // 本仓原先没有任何键占着 R（h/z/\/m 是提示/撤销/切模式），所以不需要换键。
+  else if ((ev.key === 'r' || ev.key === 'R') && game) restart();
   else if (ev.key === '/') setMode(SLASH);
   else if (ev.key === '\\') setMode(BACK);
   else if (ev.key === 'm' && game) setMode(game.mode === SLASH ? BACK : SLASH);
@@ -452,6 +490,7 @@ window.slant = {
   begin,
   useHint,
   undo,
+  restart,
   setMode,
   // The harness commits through the same path a pointer release does, so a scenario that passes
   // here has driven the real state machine rather than a copy of it.
