@@ -124,7 +124,7 @@ js/engine/generate.js 种解 → 长区域 → 按"唯一且推得完"删数字 
 js/ui/game.js       状态机：手势、撤销、提示、判胜
 js/render/board.js  几何 + 绘制 + 命中（格子中心与斜线上的采样点）
 js/store.js         localStorage 单键存档：种子 + 斜线 + 这一局的花费
-tools/              engine-test / balance / playtest(CDP) / scenarios / verify.sh / tools/assemble-site / tools/deploy-set / tools/deploy-set-selftest
+tools/              engine-test / balance / playtest(CDP) / scenarios / verify.sh / assemble-site.sh / deploy-set.mjs / deploy-set-selftest.mjs
 tools/assemble-site.sh  部署产物的唯一清单（pages.yml 与本地闸调同一支）
 tools/deploy-set.mjs  部署集闸：检查即将上传的那份产物
 tools/deploy-set-selftest.mjs  部署集闸的阴性自证（每一类断言当场打红一次）
