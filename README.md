@@ -20,8 +20,10 @@
   "不管剩下的格怎么放，都不可能让所有数字对上"。这条判据只在真矛盾时开口（见 DESIGN §6）。
 - 难度不是标签：`初学 → 大师` 五档的分数带是**实测**出来的（`npm run balance` 打印分位表），
   档位排的是「盘面多大」×「留下多少数字」，`band` 是**选取目标**，`balance` 盯着不许漂移。
-- 规模：9 个 ES Module / 1,723 行 JS + 8 个验证脚本 / 2,279 行 + 520 行 CSS/HTML，**运行时依赖 0 个**。
-- 验证：**123 项 Node 断言** + **256 项浏览器断言**（9 个场景，读 DOM 几何与画布像素，不读标志位）。
+- 规模：9 个 ES Module / 1,900 行 JS + 8 个验证脚本 / 2,426 行 + 594 行 CSS/HTML，**运行时依赖 0 个**。
+  （`find js -name '*.js' | grep -v sw-register | wc -l`、`wc -l $(find js -name '*.js') tools/*`、
+  `wc -l css/*.css index.html` —— 这三条就是这四个数的出处，改完代码顺手一敲就能对账。）
+- 验证：**123 项 Node 断言** + **295 项浏览器断言**（10 个场景，读 DOM 几何与画布像素，不读标志位）。
 - **在线试玩**：<https://z-biz-game.github.io/z-biz-game-slant-cos/>（`main` 分支推送即自动部署）
 
 ---
@@ -38,7 +40,7 @@ npm run electron     # 桌面壳（electron/main.cjs，同一份代码）
 npm run check        # 逐文件 node --check 语法门禁
 npm test             # 引擎断言 123 项：规则可靠性 / 生成保证 / 状态机 / 存档形状
 npm run balance      # 难度实测台：每档分数分位、命中率、求解代价、档位阶梯门禁
-npm run verify       # 无头 Chrome 跑 9 个浏览器场景（需本机 Chrome，见下）
+npm run verify       # 无头 Chrome 跑 10 个浏览器场景（需本机 Chrome，见下）
 ```
 
 `npm run verify` 自己起服务、自己开 Chrome、自己收尾，退出码即结论：
@@ -53,8 +55,29 @@ npm run verify       # 无头 Chrome 跑 9 个浏览器场景（需本机 Chrome
 === save ===      21 checks, 0 failed  {bytes: 139}
 === resume ===    24 checks, 0 failed
 === layout ===    23 checks, 0 failed  {cell: 56, dpr: 1}
+=== hud ===       39 checks, 0 failed  {fs: entered, focus: true, fsEnabled: true, frozen: 0, resumed: 223, afterRestart: 0}
 === ALL GREEN ===
 ```
+
+`hud` 这一组是 2026-10-04 补的：顶栏四枚控件（`btn-sound`/`btn-motion`/`btn-pause`/`btn-fullscreen`）
+里，**暂停与全屏这两枚此前没有任何场景点过**——`index.html` 就算把监听器删光，另外九组照样全绿。
+这一组不读 `paused` 标志（`window.slant` 根本没暴露它），读的是玩家能核对的两件事：
+按钮上写着什么，和耗时时钟 `elapsed()` 动不动。于是"暂停"这句承诺被钉成
+**Δ 恰好等于 0**（不是"变慢"）、**松手第一帧不倒灌暂停期间的墙钟**（跳变必须 < 200 ms，
+而刚才冻着的是 700 ms）、以及**标签与时钟在任何状态机动作之后仍然一致**（`重开本题` 会保持停表，
+写着「继续」的按钮底下时钟必须在走——反过来说也一样）。全屏走的是真进真出：
+`Runtime.evaluate` 带 `userGesture` 交出一次真实用户激活，第二次点击必须是退出而不是"再进一次"。
+这里有一处台架缺陷被顺手修掉了：headless 里同一个 user-data-dir 可以堆着好几张页，
+**排在后面的那张 `document.hasFocus()` 为 false，Chrome 就拒绝让它进全屏**——同一份代码
+因此会在"进了全屏"和"按不支持灰掉"两个分支间随机切换（断言条数 39 ↔ 32）。
+`playtest.cjs` 现在在跑场景前 `Page.bringToFront`，本机连跑 6 次读数逐次相同（`fs: entered`）。
+
+这五把刀当场证明这条腿会红（每一把都是把**仓库副本**里的一处改成坏版本，再单独重跑 `hud`）：
+`setPaused` 只改文字不停表 → 红 2 条；恢复时把暂停的墙钟灌回计时 → 红 1 条（正是倒灌那条）；
+删掉全屏监听器 → 红 2 条（点名"要么真进全屏要么给出理由"和"理由是句空话"）；
+把 `#btn-pause` 改名 → 红 11 条而**不是一场崩溃**（缺失的控件读成空标签，名册先红）；
+`aria-pressed` 写反 → 红 3 条。想在本地重放：改完那一处，`SCENARIOS=hud ./tools/verify.sh`
+就会把红的那几条按名字打出来。
 
 同一套断言可以直接打线上产物，"部署过没部署过"不是一句声明：
 

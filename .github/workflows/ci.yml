@@ -65,7 +65,8 @@ jobs:
         with:
           node-version: 22
 
-      # 256 项浏览器断言（9 个场景 engine gen play hint stroke conflict save resume layout）在两种 URL 形态下的条数逐条相同，是 2026-09-28 在本机实跑出来的，
+      # 295 项浏览器断言（10 个场景 engine gen play hint stroke conflict save resume layout hud）在两种 URL 形态下的条数逐条相同，
+      # 是 2026-10-04 在本机把两种形态各跑一遍量出来的（两份日志各 10 组、各 295 条，root 形态见 README 那一块），
       # 不是引用。在这一步之前 CI 一步都没跑过 tools/verify.sh：闸是写了给人看的，不是给人跑的。
       - name: Browser gate, root shape
         env:

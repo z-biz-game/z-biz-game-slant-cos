@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-shot browser verification: real Chrome, real DOM, scripted scenarios.
 #
-#   ./tools/verify.sh                 # engine + gen + play + hint + save/resume + layout
+#   ./tools/verify.sh                 # engine + gen + play + hint + save/resume + layout + hud
 #   SCENARIOS="play hint" ./tools/verify.sh
 #   BASE_URL=https://z-biz-game.github.io/z-biz-game-slant-cos/ ./tools/verify.sh
 #
@@ -79,7 +79,7 @@ echo "boot: slant $BOOT at $BASE"
 [ "$BOOT" = "nope" ] && { echo "window.slant never appeared at $BASE" >&2; exit 4; }
 
 FAILED=0
-for s in ${SCENARIOS:-engine gen play hint stroke conflict save resume layout}; do
+for s in ${SCENARIOS:-engine gen play hint stroke conflict save resume layout hud}; do
   echo "=== $s ==="
   node tools/playtest.cjs scenario "$s" 2>/tmp/slant-$s.console.log | tail -1 | sed 's/^RESULT //' | python3 -c "
 import sys, json
