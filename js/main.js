@@ -312,8 +312,10 @@ function onWin() {
   el.winMeta.textContent = `${tierFor(game.puzzle.tier).name} · ${game.w}×${game.h} · ${fmtMs(ms)} · ${game.moves} 步 · 提示 ${game.hints} 次`;
   el.winRecord.textContent = better ? '新纪录：这一局比存档里的更不求人。' : '未破纪录：同档先比提示次数。';
   el.winVeil.hidden = false;
-  const rect = el.canvas.getBoundingClientRect();
-  fx.burst('win', rect.width / 2, rect.height / 2, Math.max(0.6, rect.width / 420));
+  // 覆盖层的绘制空间是 view.geo 的布局像素（fxCanvas 用设备像素建、再 setTransform(dpr)），
+  // 不是 rect 的渲染后像素。拿 rect 定中心，页面缩放下这串火花会整体偏离棋盘。
+  const geo = view.geo;
+  fx.burst('win', geo.w / 2, geo.h / 2, Math.max(0.6, geo.w / 420));
   fx.ring(null, null, 0.0001);
   Sound.win();
   renderRecords();

@@ -47,6 +47,17 @@ jobs:
       - name: Save decode gate (one bad record drops only itself)
         run: node tools/save_gate.mjs
 
+      # 命中映射只在"画布被 CSS 缩放过"时才暴露错位，而无头浏览器按固定 900×900 视口跑，
+      # 永远缩不到那个比例 —— 浏览器闸对它是盲的。所以 125 次逐格点击放在纯 Node 里定罪。
+      - name: Pointer hit-test gate (no 点 A 打 B under CSS scaling)
+        run: node tools/hit_gate.mjs
+
+      # 官方帧率探针用 vm.runInContext 装载，解析不了本仓的 ESM import，对本仓只能判
+      # "无法比对"。这一步把"帧率无关"从一句注释变成断言，并自带阴性对照：
+      # 变异 accum += dt → accum += 1/60 后必须变红，否则说明尺子是空跑的。
+      - name: Frame-rate gate (fixed step + built-in negative control)
+        run: node tools/frame_gate.mjs
+
       - name: Entry files exist
         run: test -f index.html && grep -q '<canvas' index.html && grep -q 'js/main.js' index.html
 
