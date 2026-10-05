@@ -11,6 +11,9 @@
     "test": "node tools/engine-test.mjs",
     "balance": "node tools/balance.mjs",
     "save-gate": "node tools/save_gate.mjs",
+    "asset-gate": "python3 tools/asset_gate.py --selfcheck",
+    "frame-gate": "node tools/frame_gate.mjs",
+    "level-gate": "node tools/level_gate.mjs",
     "verify": "bash tools/verify.sh",
     "check": "for f in js/*.js js/*/*.js; do node --check \"$f\" || exit 1; done && node --check server.cjs && node --check electron/main.cjs && for f in tools/*.mjs tools/scenarios.js; do node --check \"$f\" || exit 1; done && echo OK"
   },
