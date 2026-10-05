@@ -42,6 +42,11 @@ jobs:
         env:
           SAMPLES: "24"
 
+      # 坏存档不体现在像素上：浏览器闸采样画布，它分辨不出"一条手改的记录带走了整份存档"。
+      # 所以这份定罪放在无浏览器的 check job 里，68 条断言全是纯 Node。
+      - name: Save decode gate (one bad record drops only itself)
+        run: node tools/save_gate.mjs
+
       - name: Entry files exist
         run: test -f index.html && grep -q '<canvas' index.html && grep -q 'js/main.js' index.html
 
