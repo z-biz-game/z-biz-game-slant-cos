@@ -688,6 +688,8 @@ window.slant = {
   fxState: () => fx.state(),
   runReadout,
   setMode,
+  // 静音定罪要数"关声之后还建了几个振荡器 / 有没有真的 suspend"，Sound 不挂出来就只能读字符串。
+  sound: Sound,
   // The harness commits through the same path a pointer release does, so a scenario that passes
   // here has driven the real state machine rather than a copy of it.
   stroke(cells, value) {
