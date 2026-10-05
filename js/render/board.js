@@ -53,11 +53,15 @@ export class BoardView {
 
   hitCell(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
-    const { cell, x, y } = this.geo;
+    const { cell, x, y, w, h } = this.geo;
     const game = this.game;
     if (!cell || !game) return -1;
-    const px = clientX - rect.left - x;
-    const py = clientY - rect.top - y;
+    // rect.width 与 geo.w 只在"完全没有 CSS 缩放"时相等。页面缩放、容器 max-width、iOS 捏合
+    // 缩放都会让两者脱钩，直接拿 client 像素减 left 再除 cell，手机上就是"点 A 打 B"。
+    const sx = w ? rect.width / w : 1;
+    const sy = h ? rect.height / h : 1;
+    const px = (clientX - rect.left) / sx - x;
+    const py = (clientY - rect.top) / sy - y;
     if (px < 0 || py < 0) return -1;
     const gx = Math.floor(px / cell);
     const gy = Math.floor(py / cell);
