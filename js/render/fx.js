@@ -23,7 +23,15 @@ export function createFx({ sprites = null, reduceMotion = false, now = () => per
   let time = 0; // 已结算的仿真时间（秒）
   let particles = [];
   let rings = [];
-  let shake = 0;
+
+  // 已流逝但未必已结算的时间。time 只在 step() 里按整步走，而放线/提示这类事件发生在两步之间：
+  // 出生时刻必须记在 elapsed 域（time + 未结算的余量 + 上一帧之后又过去的那截），否则同一只手指
+  // 在 30Hz 落在帧尾、在 120Hz 落在帧头，粒子的寿命与消失时刻就会差出最多一整帧。
+  const elapsed = () => {
+    const t = now();
+    const pending = t > last ? Math.min(0.25, (t - last) / 1000) : 0;
+    return time + accum + pending;
+  };
 
   const rand = (() => {
     let s = 20261002;
@@ -48,20 +56,24 @@ export function createFx({ sprites = null, reduceMotion = false, now = () => per
   }
 
   function integrate(dt) {
+    const t0 = time; // 本步覆盖的是 elapsed 域里的 [t0, t0+dt)
     time += dt;
     for (const p of particles) {
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vy += GRAV * dt;
-      p.vx *= 1 - 0.9 * dt;
-      p.rot += p.vr * dt;
-      p.age += dt;
+      // 出生落在本步中间的那颗粒子，只走它真正存在的那一截：整步走给它，
+      // 就等于让它替前面那半帧补课——30/120Hz 的差别正是从这里来的。
+      const h = Math.max(0, Math.min(dt, t0 + dt - p.born));
+      if (h > 0) {
+        p.x += p.vx * h;
+        p.y += p.vy * h;
+        p.vy += GRAV * h;
+        p.vx *= 1 - 0.9 * h;
+        p.rot += p.vr * h;
+      }
+      p.age = Math.max(0, time - p.born);
     }
     particles = particles.filter((p) => p.age < p.ttl);
-    for (const r of rings) r.age += dt;
+    for (const r of rings) r.age = Math.max(0, time - r.born);
     rings = rings.filter((r) => r.age < r.ttl);
-    shake *= Math.pow(0.82, dt * 60);
-    if (shake < 0.05) shake = 0;
   }
 
   // 一帧最多追 8 步：掉帧时宁可让粒子慢半拍，也不在这一帧里卡住主线程。
@@ -93,6 +105,7 @@ export function createFx({ sprites = null, reduceMotion = false, now = () => per
         vy: Math.sin(a) * sp + k.up * scale,
         rot: rand() * Math.PI,
         vr: (rand() - 0.5) * 9,
+        born: elapsed(),
         age: 0,
         ttl: k.life * (0.7 + rand() * 0.6),
         size: k.size * (0.7 + rand() * 0.7) * scale,
@@ -107,7 +120,7 @@ export function createFx({ sprites = null, reduceMotion = false, now = () => per
   // 提示脉冲：寿命由仿真时钟结算，不再挂 setTimeout——120Hz 与 30Hz 下它
   // 消失的时刻相同，且被暂停/重开清掉时不会出现"定时器还在跑"的幽灵高亮。
   function ring(cell, node, ttl = 1.6, color = null) {
-    const r = { cell, node, age: 0, ttl: reduceMotion ? 0.0001 : ttl, color, static: reduceMotion };
+    const r = { cell, node, born: elapsed(), age: 0, ttl: reduceMotion ? 0.0001 : ttl, color, static: reduceMotion };
     rings.push(r);
     return r;
   }
@@ -161,12 +174,10 @@ export function createFx({ sprites = null, reduceMotion = false, now = () => per
     ring,
     active,
     render,
-    shake,
     reset() {
       particles = [];
       rings = [];
       accum = 0;
-      shake = 0;
       time = 0; // 重开是"重新开局"，不是"接着上一盘仿真"：已结算时间必须一起归零
       last = now();
     },
