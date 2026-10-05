@@ -90,7 +90,9 @@ function fxPulse() {
 }
 
 function fxFrame() {
-  const elapsed = fx.feed(); // 暂停时也要刷新 last，否则回来会补算整个暂停段
+  // 暂停时也要刷新 last（否则回来会补算整个暂停段），但要告诉它是"空转"：
+  // 暂停的那 5000ms 一秒都不许进累加器，否则恢复的第一帧会免费结算最多 8 步。
+  const elapsed = fx.feed(paused);
   if (!paused) {
     const steps = fx.step();
     if (steps || elapsed) {
