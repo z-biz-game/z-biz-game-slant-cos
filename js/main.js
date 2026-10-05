@@ -320,7 +320,7 @@ function onWin() {
 function afterStep(soundKey, cells) {
   if (soundKey && cells && cells.length) {
     const r = view.cellRect(cells[0]);
-    fx.burst(soundKey, r.x + r.w / 2, r.y + r.h / 2, Math.max(0.5, r.w / 44));
+    fx.burst(soundKey, r.x + r.size / 2, r.y + r.size / 2, Math.max(0.5, r.size / 44));
   }
   syncAll();
   if (game.status === 'won') onWin();
