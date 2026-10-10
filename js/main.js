@@ -396,32 +396,6 @@ function begin({ tier = 'trainee', seed = null, resume = null } = {}) {
 // 为什么不能只调一次 resetInk()/init() 就完事：那些只碰得到引擎里的盘面数组，
 // UI 层的撤销栈、步数、提示次数、提示游标、胜负标记、耗时时钟都是各自独立存着的缓存，
 // 不挨个点名就会留半局的痕迹在新局里（详见 Game.resetAll 的注释）。
-function restart() {
-  if (!game) return null;
-  game.resetAll();               // 盘面 + steps + moves + hints + cursor + status + mode + lastHint
-  pulse = null;                   // 上一条提示留下的高亮，属于上一局
-  stroke = null;                  // 上一次没画完的拖拽手势
-  el.winVeil.hidden = true;       // 结算遮罩收起：上一局赢了的遮罩不能压在重开后的盘上
-  baseElapsed = 0;                // 耗时归零
-  // 暂停中重开就保持停表，否则 startClock() 会把暂停期间憋下的墙钟一次性灌进计时。
-  if (paused) {
-    startedAt = 0;
-    clearInterval(ticker);
-    ticker = 0;
-  } else {
-    startClock();                 // 没暂停就重新起跑，重开后的计时是这一局自己的
-  }
-  setMode(SLASH);                 // 临时态：落笔模式回默认，HUD 的 aria-pressed 一起回写
-  el.hintRule.textContent = '提示理由';
-  el.hintLine.textContent = '按 提示 会说出当前能推的一格，以及它依据哪条规则。';
-  show('game');
-  syncAll();
-  // 存档覆盖成本局的空盘：刷新页面不会又冒出走错那半局的线。
-  // 特意**不**碰 Store 的偏好（静音 / 减动效 / 最好成绩 / 纪录）——那些是玩家的东西，不是这一局的东西。
-  flushResume();
-  renderResumeCard();
-  return game;
-}
 
 function show(which) {
   el.viewMenu.hidden = which !== 'menu';
@@ -850,20 +824,6 @@ window.slant = {
 //
 // 用 var 而不是 let：本块在文件末尾，而 startClock() 可能在它之前就被 begin() 调过；
 // let 声明提升不到初始化，TDZ 会直接抛 ReferenceError。
-var paused = false;
-function setPaused(v) {
-  v = !!v;
-  if (v === paused) return paused;
-  if (v) stopClock(); else startClock();
-  paused = v;
-  var b = document.getElementById('btn-pause');
-  if (b) {
-    b.setAttribute('aria-pressed', String(paused));
-    b.textContent = paused ? '继续' : '暂停';
-    b.title = paused ? '继续 (P)' : '暂停 (P)';
-  }
-  return paused;
-}
 function togglePause() { return setPaused(!paused); }
 function isPaused() { return paused; }
 
