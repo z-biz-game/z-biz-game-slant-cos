@@ -20,8 +20,10 @@
   "不管剩下的格怎么放，都不可能让所有数字对上"。这条判据只在真矛盾时开口（见 DESIGN §6）。
 - 难度不是标签：`初学 → 大师` 五档的分数带是**实测**出来的（`npm run balance` 打印分位表），
   档位排的是「盘面多大」×「留下多少数字」，`band` 是**选取目标**，`balance` 盯着不许漂移。
-- 规模：9 个 ES Module / 1,723 行 JS + 4 个验证脚本 / 1,585 行 + 520 行 CSS/HTML，**运行时依赖 0 个**。
-- 验证：**123 项 Node 断言** + **256 项浏览器断言**（9 个场景，读 DOM 几何与画布像素，不读标志位）。
+- 规模：9 个 ES Module / 1,900 行 JS + 8 个验证脚本 / 2,426 行 + 594 行 CSS/HTML，**运行时依赖 0 个**。
+  （`find js -name '*.js' | grep -v sw-register | wc -l`、`wc -l $(find js -name '*.js') tools/*`、
+  `wc -l css/*.css index.html` —— 这三条就是这四个数的出处，改完代码顺手一敲就能对账。）
+- 验证：**123 项 Node 断言** + **295 项浏览器断言**（10 个场景，读 DOM 几何与画布像素，不读标志位）。
 - **在线试玩**：<https://z-biz-game.github.io/z-biz-game-slant-cos/>（`main` 分支推送即自动部署）
 
 ---
@@ -38,7 +40,7 @@ npm run electron     # 桌面壳（electron/main.cjs，同一份代码）
 npm run check        # 逐文件 node --check 语法门禁
 npm test             # 引擎断言 123 项：规则可靠性 / 生成保证 / 状态机 / 存档形状
 npm run balance      # 难度实测台：每档分数分位、命中率、求解代价、档位阶梯门禁
-npm run verify       # 无头 Chrome 跑 9 个浏览器场景（需本机 Chrome，见下）
+npm run verify       # 无头 Chrome 跑 10 个浏览器场景（需本机 Chrome，见下）
 ```
 
 `npm run verify` 自己起服务、自己开 Chrome、自己收尾，退出码即结论：
@@ -53,8 +55,29 @@ npm run verify       # 无头 Chrome 跑 9 个浏览器场景（需本机 Chrome
 === save ===      21 checks, 0 failed  {bytes: 139}
 === resume ===    24 checks, 0 failed
 === layout ===    23 checks, 0 failed  {cell: 56, dpr: 1}
+=== hud ===       39 checks, 0 failed  {fs: entered, focus: true, fsEnabled: true, frozen: 0, resumed: 223, afterRestart: 0}
 === ALL GREEN ===
 ```
+
+`hud` 这一组是 2026-10-04 补的：顶栏四枚控件（`btn-sound`/`btn-motion`/`btn-pause`/`btn-fullscreen`）
+里，**暂停与全屏这两枚此前没有任何场景点过**——`index.html` 就算把监听器删光，另外九组照样全绿。
+这一组不读 `paused` 标志（`window.slant` 根本没暴露它），读的是玩家能核对的两件事：
+按钮上写着什么，和耗时时钟 `elapsed()` 动不动。于是"暂停"这句承诺被钉成
+**Δ 恰好等于 0**（不是"变慢"）、**松手第一帧不倒灌暂停期间的墙钟**（跳变必须 < 200 ms，
+而刚才冻着的是 700 ms）、以及**标签与时钟在任何状态机动作之后仍然一致**（`重开本题` 会保持停表，
+写着「继续」的按钮底下时钟必须在走——反过来说也一样）。全屏走的是真进真出：
+`Runtime.evaluate` 带 `userGesture` 交出一次真实用户激活，第二次点击必须是退出而不是"再进一次"。
+这里有一处台架缺陷被顺手修掉了：headless 里同一个 user-data-dir 可以堆着好几张页，
+**排在后面的那张 `document.hasFocus()` 为 false，Chrome 就拒绝让它进全屏**——同一份代码
+因此会在"进了全屏"和"按不支持灰掉"两个分支间随机切换（断言条数 39 ↔ 32）。
+`playtest.cjs` 现在在跑场景前 `Page.bringToFront`，本机连跑 6 次读数逐次相同（`fs: entered`）。
+
+这五把刀当场证明这条腿会红（每一把都是把**仓库副本**里的一处改成坏版本，再单独重跑 `hud`）：
+`setPaused` 只改文字不停表 → 红 2 条；恢复时把暂停的墙钟灌回计时 → 红 1 条（正是倒灌那条）；
+删掉全屏监听器 → 红 2 条（点名"要么真进全屏要么给出理由"和"理由是句空话"）；
+把 `#btn-pause` 改名 → 红 11 条而**不是一场崩溃**（缺失的控件读成空标签，名册先红）；
+`aria-pressed` 写反 → 红 3 条。想在本地重放：改完那一处，`SCENARIOS=hud ./tools/verify.sh`
+就会把红的那几条按名字打出来。
 
 同一套断言可以直接打线上产物，"部署过没部署过"不是一句声明：
 
@@ -124,9 +147,58 @@ js/engine/generate.js 种解 → 长区域 → 按"唯一且推得完"删数字 
 js/ui/game.js       状态机：手势、撤销、提示、判胜
 js/render/board.js  几何 + 绘制 + 命中（格子中心与斜线上的采样点）
 js/store.js         localStorage 单键存档：种子 + 斜线 + 这一局的花费
-tools/              engine-test / balance / playtest(CDP) / scenarios / verify.sh
+tools/              engine-test / balance / playtest(CDP) / scenarios / verify.sh / assemble-site.sh / deploy-set.mjs / deploy-set-selftest.mjs
+tools/assemble-site.sh  部署产物的唯一清单（pages.yml 与本地闸调同一支）
+tools/deploy-set.mjs  部署集闸：检查即将上传的那份产物
+tools/deploy-set-selftest.mjs  部署集闸的阴性自证（每一类断言当场打红一次）
 ```
 
 ## 许可
 
 MIT。见 `LICENSE`。
+
+## 上线的到底是哪一批文件
+
+这个仓没有打包器：站点=一次文件拷贝。以前「拷哪些」写在 `pages.yml` 的 `run:` 里（手抄的几行
+`cp`）。本地 `index.html` 直读仓库根，永远自洽；线上却按那份清单拷，于是页面后来引用的
+`manifest.webmanifest`、`sw.js`、`icons/*` 可能一个都没上去——线上 404，而仓里的引擎测试与
+真浏览器闸全绿，因为它们跑的都是仓库根，没有任何一步在「按清单拷」的那个环境下加载过页面。
+
+现在清单只有一份，住在 `tools/assemble-site.sh`：CI 调它拷 `_site`，本地闸调它拷临时目录，
+然后**对拷出来的产物**提要求（`tools/deploy-set.mjs`）：
+
+- **W 清单与页面同源**：`pages.yml` 里必须真有 `run: bash tools/assemble-site.sh <dir>` 这一行，
+  `ci.yml` 里必须真有 `run: node tools/deploy-set.mjs`。认的是调用那一行，不是文件里出现过这个
+  路径——注释里本来就会写它，只 grep 字符串会被一句散文喂绿。
+- **R 引用可达**：引用不靠手打名单。从 `index.html` 的 `href/src` 出发，凡解析出来是 `.js`/`.css`
+  的就把那一站也扫一遍（CSS 的 `url()`、JS 去掉注释后的 `'./…'` 字面量、`new URL(x, base)` 的两种
+  基、`navigator.serviceWorker.register`、`scope`），`manifest` 的 icons/screenshots/shortcuts 各自
+  的 `src` 也算引用。取径上读不到的那一站本身就是红（读不到＝这一站根本没扫）。每条引用都必须在
+  产物里且非 0 字节；绝对路径单列一条红，因为 Pages 挂在 `/<repo>/` 前缀下会跳出去。
+- **P 位图不许说谎**：`manifest` 声明的 `sizes` 必须等于 PNG IHDR 的真实宽高——文件图标读文件头，
+  内联成 base64 的图标先解码再读同一段。后一条不是可选项：图标可能住在清单里而不是盘上的 `.png`
+  （有的仓另有一条"零二进制文件"的承诺，那条只约束"有没有 .png 这个文件"）；如果 P 段只筛文件名，
+  声明写 512 而真图 192 就一路放行。
+- **钉住两个数**：R 段实际检查的路径条数（`25`）与这一次跑的断言条数（`43`），两个数
+  都钉在 `tools/deploy-set.mjs` 顶部的那对常量里。没改页面却掉了，说明解析断了；删掉一张图标会同时
+  少一条 R10 与那张的 P1/P2，所以两个数一起钉，断言条数能漂就是闸在缩水的信号。这一节故意只写数值、
+  不写那对常量的名字，也不写别仓文档闸的编号：有的仓的文档闸会拿"文档里出现过的同名标识号"回数它
+  自己的条数，还有的会把文档里点到的每个组编号逐个核对"这一轮真的发过"——两道闸共用一个名字，
+  或者在本仓的文档里出现一个本仓没有的组编号，打红的都是不相干的那一边。
+
+`tools/deploy-set-selftest.mjs` 是这两颗钉的阳性证明：它把仓库复制到临时目录，照着每一类断言
+各下一刀（X1 清单不收位图目录 / X2 模块边改名 / X3 CSS 写绝对路径 / X4 `start_url` 绝对 /
+X5 删光 >=512 图标 / X6 少一个必填字段 / X7 声明尺寸与真图不符 / X8 workflow 不调脚本 /
+X9 CI 不跑闸 / X10 是阴性对照——往入口 JS 追加一行只写在注释里的假路径，闸必须仍然绿、条数仍然
+`25`、断言仍然 `43`；X11 og:image 退回相对路径 / X12 og:image 的前缀指向别的 slug /
+X13 内联位图谎报尺寸——只在有靶子时下：X11/X12 要页面上那句 og:image，X13 要清单里真有一段 base64
+图标，没有就打印 SKIP；反过来 X1 没有位图目录可砍时改砍 css，P 段一位都不核时台架直接报靶子不够），
+要求每一刀都让闸**点名**变红。靶子从 `DEPLOY_SET_DUMP=1`
+的出处表现挑（取径真的会读的那支 JS / 那一张 CSS，不写死某一个仓的入口名），所以页面改了、仓与仓
+不同，台架跟着走。
+
+`node tools/deploy-set.mjs` 与 `node tools/deploy-set-selftest.mjs` 就是 CI 跑的那两条命令本身
+（package.json 里的 `deploy-set` / `deploy-set:selftest` 只是同一支脚本的 npm 入口）；本仓的整闸在 `tools/verify.sh` 的 `=== deploy-set ===` 那一段也各跑一次。它们红的时候并进本仓那条出口的退出码——这一条是这么证的：
+把 ci.yml 里那行 `run: node tools/deploy-set.mjs` 砍掉，本仓整闸必须点名红且退出码非 0。
+所以「本地全绿、线上 404 自己的 manifest / sw.js / 图标」这一类坏法在本地就会红。
+

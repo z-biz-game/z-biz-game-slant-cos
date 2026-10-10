@@ -22,14 +22,7 @@ jobs:
       # No npm install: the game has zero runtime dependencies, and pulling Electron into
       # CI to prove nothing is how a repo starts failing on a network flake.
       - name: Syntax check every source
-        run: |
-          for f in $(git ls-files 'js/*.js' 'js/*/*.js'); do node --check "$f" || exit 1; done
-          node --check server.cjs
-          node --check sw.js
-          node --check electron/main.cjs
-          node --check electron/preload.cjs
-          for f in $(git ls-files 'tools/*.mjs' tools/scenarios.js); do node --check "$f" || exit 1; done
-
+        run: npm run check
       # The real gate: every generated board must have one solution and be reachable by
       # pencil logic. This is a plain Node test, so it guards merges without a browser.
       - name: Engine tests
@@ -60,6 +53,15 @@ jobs:
 
       - name: Entry files exist
         run: test -f index.html && grep -q '<canvas' index.html && grep -q 'js/main.js' index.html
+      # 部署集闸：按 tools/assemble-site.sh 那份清单真拷一遍产物，要求页面会去要的东西
+      # 都在里面。这一仓曾经因为清单落后于页面而线上 404 自己的 manifest/sw.js/图标，
+      # 而本地一切全绿——因为本地根本没有「按清单拷」这一步。
+      - name: Deploy set gate
+        run: node tools/deploy-set.mjs
+      # 阴性自证：每一类断言当场被打红一次，闸必须点名吃掉那一刀；写在注释里的假路径
+      # 必须不算引用。钉住的条数由这一跑证明它真的会红，不是由记性证明。
+      - name: Deploy set gate proves it can fail
+        run: node tools/deploy-set-selftest.mjs
 
       # 图标类交付最容易注水成"仓里躺着一张 1024 PNG，而 index.html 还指着 data-URI 的 SVG"，
       # 或者 manifest 写了 icons 而文件没提交。这一步把两种都判红：每条同源引用必须解析到
@@ -79,7 +81,8 @@ jobs:
         with:
           node-version: 22
 
-      # 256 项浏览器断言（9 个场景 engine gen play hint stroke conflict save resume layout）在两种 URL 形态下的条数逐条相同，是 2026-09-28 在本机实跑出来的，
+      # 295 项浏览器断言（10 个场景 engine gen play hint stroke conflict save resume layout hud）在两种 URL 形态下的条数逐条相同，
+      # 是 2026-10-04 在本机把两种形态各跑一遍量出来的（两份日志各 10 组、各 295 条，root 形态见 README 那一块），
       # 不是引用。在这一步之前 CI 一步都没跑过 tools/verify.sh：闸是写了给人看的，不是给人跑的。
       - name: Browser gate, root shape
         env:

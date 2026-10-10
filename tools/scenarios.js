@@ -734,5 +734,137 @@
     return report({ cell: A().view.geo.cell, dpr: A().view.geo.dpr });
   };
 
-  w.__ng = { engine, gen, play, hint, stroke, conflict, save, resume, layout };
+  // ---------- hud ----------
+  //
+  // The top bar ships four buttons, and before this group no scenario had ever clicked
+  // #btn-pause or #btn-fullscreen: either could have carried a dead listener and the other nine
+  // groups would still read green. Everything asserted below is a DOM read — window.slant
+  // exposes no `paused` flag, so "is it paused?" is answered by "does elapsed() move?" plus
+  // "does the button say so?", which is exactly the pair a player can check.
+  // Entering fullscreen needs user activation (playtest.cjs hands this evaluate one, and Chrome
+  // keeps it alive ~5 s), so the fullscreen cycle runs first, while the activation is fresh.
+  const hud = async () => {
+    const ROSTER = ['btn-sound', 'btn-motion', 'btn-pause', 'btn-fullscreen'];
+    // A control that went missing must produce a list of named FAILs, not a TypeError partway
+    // through the group — the crash would hide every assertion after it. The stand-in is a real
+    // detached button, so reads come back empty/zero and the failures stay readable.
+    const detached = document.createElement('button');
+    const el = (id) => document.getElementById(id) || detached;
+    const lab = (id) => ({
+      pressed: el(id).getAttribute('aria-pressed'),
+      text: el(id).textContent.trim(),
+      title: el(id).title,
+      disabled: el(id).disabled,
+    });
+    // Δ of the page's own clock over a wait — the only read that distinguishes "frozen"
+    // (Δ === 0) from "merely slow".
+    const advance = async (ms) => {
+      const a = A().elapsed();
+      await wait(ms);
+      return A().elapsed() - a;
+    };
+    A().begin({ tier: 'expert', seed: 'scen|hud' });
+    await wait(60);
+
+    // ---- fullscreen: a click has to be tellable apart from a no-op ----
+    const fb = () => lab('btn-fullscreen');
+    const vw0 = window.innerWidth;
+    el('btn-fullscreen').click();
+    await wait(400);
+    const entered = !!document.fullscreenElement;
+    ck('点全屏要么真进全屏，要么被禁用且改了理由', entered || (fb().disabled === true && fb().title !== '全屏（F）'), JSON.stringify({ entered, ...fb() }));
+    if (entered) {
+      eq('全屏里按钮标成按下', fb().pressed, 'true');
+      eq('全屏里按钮文字改成退出', fb().text, '退出全屏');
+      const de = document.documentElement;
+      ck('全屏没有撑出横向滚动', de.scrollWidth <= de.clientWidth + 1, `${de.scrollWidth} vs ${de.clientWidth}`);
+      const r = A().view.canvas.getBoundingClientRect();
+      ck('全屏里棋盘整个在视口内', r.left >= -1 && r.top >= -1 && r.right <= window.innerWidth + 1 && r.bottom <= window.innerHeight + 1,
+        JSON.stringify({ vw: window.innerWidth, vh: window.innerHeight, l: Math.round(r.left), rt: Math.round(r.right), b: Math.round(r.bottom) }));
+      // The second click is the exit, not "fullscreen again". Esc and system gestures never
+      // reach this listener at all — the label is only trustworthy because fullscreenchange
+      // drives sync(), so exiting through the button is the shortest way to prove that wire.
+      el('btn-fullscreen').click();
+      await wait(400);
+      eq('再点一次是退出全屏', !!document.fullscreenElement, false);
+      eq('退出后按钮文字回到「全屏」', fb().text, '全屏');
+      eq('退出后 aria-pressed 回假', fb().pressed, 'false');
+      ck('退出后 body 上的 fullscreen 类摘掉', !document.body.classList.contains('fullscreen'), document.body.className);
+      eq('退出后视口宽度复原', window.innerWidth, vw0);
+    } else {
+      ck('不支持时给出人话理由', /主屏幕|不提供/.test(fb().title), fb().title);
+      eq('不支持时不假装按下', fb().pressed, 'false');
+    }
+
+    // ---- roster: the hand-written list against the DOM ----
+    const ids = [...document.querySelectorAll('.top-actions button')].map((b) => b.id);
+    eq('顶栏控件名册逐字对上', ids.join(','), ROSTER.join(','));
+    eq('顶栏控件四枚', ids.length, ROSTER.length);
+    for (const id of ROSTER) {
+      const b = el(id).getBoundingClientRect();
+      ck(`${id} 看得见也点得着`, shown(`#${id}`) && b.height >= 28 && b.width >= 28, JSON.stringify({ w: Math.round(b.width), h: Math.round(b.height) }));
+      ck(`${id} 标签不空`, !!lab(id).text, JSON.stringify(lab(id)));
+    }
+
+    // ---- the two settings buttons: two states, and they come back ----
+    const flip = async (id, offText) => {
+      const before = lab(id);
+      el(id).click();
+      await wait(40);
+      const after = lab(id);
+      ck(`${id} 点一下两态互换`, after.pressed !== before.pressed && after.text !== before.text, JSON.stringify({ before, after }));
+      eq(`${id} 另一头的文字`, after.text, offText);
+      el(id).click();
+      await wait(40);
+      const back = lab(id);
+      ck(`${id} 再点回到原样`, back.pressed === before.pressed && back.text === before.text, JSON.stringify({ before, back }));
+    };
+    await flip('btn-sound', '音效 关');
+    await flip('btn-motion', '动效 省');
+
+    // ---- pause: the label and the clock are one fact, checked from both ends ----
+    const running = await advance(320);
+    ck('没暂停时时钟在走', running >= 150, `320 ms 的等待里 elapsed() 只走了 ${running} ms`);
+    eq('暂停按钮起初未按下', lab('btn-pause').pressed, 'false');
+    eq('暂停按钮起初写着暂停', lab('btn-pause').text, '暂停');
+    el('btn-pause').click();
+    eq('点一下 aria-pressed 变真', lab('btn-pause').pressed, 'true');
+    eq('点一下文字改成「继续」', lab('btn-pause').text, '继续');
+    ck('暂停时标题说清怎么回去', /继续/.test(lab('btn-pause').title), lab('btn-pause').title);
+    const frozen = await advance(700);
+    eq('暂停把时钟冻死（Δ 恰为 0，不是变慢）', frozen, 0);
+    // The bug this catches is the dt spike, and it lives in the jump between the frozen value and
+    // the first read after resuming — a Δ *after* the resume would happily measure 220 ms of a
+    // clock that just took on the whole paused stretch at once. Bound it by a slack (200 ms),
+    // never by a speed budget: setTimeout never fires early, so a loaded machine can only make
+    // the wait longer, and 700 ms of frozen wall clock is what has to show up to turn this red.
+    const atUnpause = A().elapsed();
+    el('btn-pause').click();
+    const backAt = A().elapsed();
+    ck('恢复的第一帧不倒灌暂停期间的墙钟', backAt - atUnpause < 200, `松手瞬间跳了 ${backAt - atUnpause} ms（刚才冻了 700 ms）`);
+    eq('再点文字改回「暂停」', lab('btn-pause').text, '暂停');
+    eq('再点 aria-pressed 回假', lab('btn-pause').pressed, 'false');
+    const resumed = await advance(220);
+    ck('恢复后时钟重新按墙钟走', resumed >= 50, `恢复后 220 ms 只走了 ${resumed} ms`);
+    // 重开本题 keeps this game paused; the button must keep agreeing with the clock however the
+    // state machine moved under it — 「继续」 over a running clock is a lie either way.
+    el('btn-pause').click();
+    A().restart();
+    await wait(40);
+    const afterRestart = { pressed: lab('btn-pause').pressed, moved: await advance(300) };
+    ck('重开后标签与时钟仍然一致', afterRestart.pressed === 'true' ? afterRestart.moved === 0 : afterRestart.moved > 0, JSON.stringify(afterRestart));
+    el('btn-pause').click();
+    const open = await advance(200);
+    ck('按钮不是单向闩：最后一次松开后时钟回来了', open >= 50, open);
+    return report({
+      fs: entered ? 'entered' : 'unsupported',
+      focus: document.hasFocus(),
+      fsEnabled: document.fullscreenEnabled,
+      frozen,
+      resumed,
+      afterRestart: afterRestart.moved,
+    });
+  };
+
+  w.__ng = { engine, gen, play, hint, stroke, conflict, save, resume, layout, hud };
 })(window);

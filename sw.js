@@ -1,70 +1,56 @@
-/* 离线外壳。VERSION 参与缓存名，发版必须改这一行 —— 但缓存策略本身是"网络优先"，
-   所以漏改版本号只会让离线兜底用旧副本，不会像 cache-first 那样把 js/css 永久钉死
-   在旧版、造出"新 HTML 配旧 JS"的鬼状态。 */
+'use strict';
+// 离线可用 + 永不被旧缓存钉住。
+//
+// 两条实测换来的口径：
+//   1) 一律 **网络优先**，命中网络才回填缓存。手工 VERSION + cache-first 的组合，
+//      发出去的 HTML 会配上上一版的 js/css，出一个"新界面配旧逻辑"的鬼状态，
+//      而且玩家自己无法恢复（只能等缓存过期）。
+//   2) 缓存名带版本号（activate 时清掉非本版的名字）。改版**不需要**同步 bump：
+//      同名文件重绘之后，网络优先这一条保证客户端下一次联网就拿到新字节。
+const VERSION = 'slant-cos-v1';
+const CACHE = `${VERSION}-shell`;
+const PRECACHE = ['index.html', 'manifest.webmanifest'];
 
-const VERSION = 'slant-v1.0.0';
-const SHELL_CACHE = `${VERSION}-shell`;
-const RUNTIME_CACHE = `${VERSION}-runtime`;
+self.addEventListener('install', (ev) => {
+  // 首屏两件套先抓下来：断网时至少能打开界面，而不是浏览器的错误页。
+  ev.waitUntil(
+    caches.open(CACHE).then((c) => c.addAll(PRECACHE).catch(() => {})).then(() => self.skipWaiting())
+  );
+});
 
-const SHELL = [
-  './',
-  './index.html',
-  './css/game.css',
-  './js/main.js',
-  './manifest.webmanifest',
-  './assets/icons/icon-192.png',
-  './assets/icons/icon-512.png',
-  './assets/icons/apple-touch-icon.png',
-  './assets/textures/paper-256.png',
-];
-
-self.addEventListener('install', (event) => {
-  // allSettled：前缀形态下少一个文件也不能让整个安装失败，那样就永远没有离线兜底了。
-  event.waitUntil(
+self.addEventListener('activate', (ev) => {
+  ev.waitUntil(
     caches
-      .open(SHELL_CACHE)
-      .then((cache) => Promise.allSettled(SHELL.map((u) => cache.add(new Request(u, { cache: 'reload' })))))
-      .then(() => self.skipWaiting()),
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => !k.startsWith(VERSION)).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    (async () => {
-      for (const key of await caches.keys()) {
-        if (key !== SHELL_CACHE && key !== RUNTIME_CACHE) await caches.delete(key);
-      }
-      await self.clients.claim();
-    })(),
-  );
-});
-
-self.addEventListener('fetch', (event) => {
-  const req = event.request;
+self.addEventListener('fetch', (ev) => {
+  const req = ev.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // 不代理第三方，也不替它们背缓存
+  if (url.origin !== self.location.origin) return;
 
-  event.respondWith(
-    (async () => {
-      let net = null;
-      try {
-        net = await fetch(req);
-      } catch {
-        net = null; // 离线 / 断网，退缓存
-      }
-      if (net && net.ok && net.type !== 'opaque') {
-        const cache = await caches.open(RUNTIME_CACHE);
-        cache.put(req, net.clone()).catch(() => {});
-      }
-      if (net) return net;
-      const hit = await caches.match(req, { ignoreSearch: true });
-      if (hit) return hit;
-      if (req.mode === 'navigate') {
-        const shell = await caches.match('./index.html');
-        if (shell) return shell;
-      }
-      throw new Error('offline: ' + url.pathname);
-    })(),
+  ev.respondWith(
+    fetch(req)
+      .then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy));
+        }
+        return res;
+      })
+      .catch(async () => {
+        const hit = await caches.match(req);
+        if (hit) return hit;
+        // 导航请求（地址栏/刷新/桌面图标）离线时回落到缓存的那份壳，不白屏。
+        if (req.mode === 'navigate') {
+          const shell = await caches.match('index.html');
+          if (shell) return shell;
+        }
+        return Response.error();
+      })
   );
 });
